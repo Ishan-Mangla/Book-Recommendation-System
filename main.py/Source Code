@@ -1,0 +1,214 @@
+from tkinter import *
+from tkinter import messagebox
+from PIL import ImageTk, Image
+import requests
+from io import BytesIO
+import urllib.parse
+
+# Initialize main window
+root = Tk()
+root.title("Book Recommendation System")
+root.geometry("1250x700")
+root.configure(bg="black")
+
+# Add title label at the top center
+title_label = Label(root, text="Books Recommendation System", font=("Arial", 24, "italic", "bold"), fg="gold", bg="black")
+title_label.grid(row=0, column=0, columnspan=4, pady=20)
+
+# Data structure for favorites
+favorites = []
+
+# Function to add book to favorites
+def add_to_favorites(book):
+    if book not in favorites:
+        favorites.append(book)
+        messagebox.showinfo("Added to Favorites", f"'{book['title']}' has been added to your favorites.")
+
+# Function to remove book from favorites
+def remove_from_favorites(book):
+    if book in favorites:
+        favorites.remove(book)
+        messagebox.showinfo("Removed from Favorites", f"'{book['title']}' has been removed from your favorites.")
+
+# Function to fetch and display book details
+def fetch_book_details():
+    book_title = search_entry.get().strip()
+    if not book_title:
+        messagebox.showwarning("Input Error", "Please enter a book title!")
+        return
+
+    # Clear previous search results
+    for widget in scrollable_frame.winfo_children():
+        widget.destroy()
+
+    # Display loading message
+    loading_label = Label(scrollable_frame, text="Loading...", font=("Arial", 20, "italic"), fg="gold", bg="black")
+    loading_label.pack(pady=20)
+    root.update()
+
+    # Google Books API Query
+    try:
+        url = f"https://www.googleapis.com/books/v1/volumes?q={urllib.parse.quote(book_title)}&maxResults=40"
+        response = requests.get(url)
+        data = response.json()
+
+        loading_label.destroy()
+
+        if "items" not in data or len(data["items"]) == 0:
+            messagebox.showinfo("No Results", "No books found for your search.")
+            return
+
+        # Display total number of results
+        total_results = len(data["items"])
+        results_label = Label(scrollable_frame, text=f"Total Results: {total_results}", font=("Arial", 16, "italic"), fg="gold", bg="black")
+        results_label.grid(row=0, column=0, columnspan=8, pady=10)
+
+        # Display books in a grid layout
+        columns = 8
+        row = 1
+        col = 0
+
+        for item in data["items"]:
+            book = item.get("volumeInfo", {})
+            title = book.get("title", "N/A")
+            authors = ", ".join(book.get("authors", ["Unknown Author"]))
+            pub_date = book.get("publishedDate", "N/A")
+            thumbnail_url = book.get("imageLinks", {}).get("thumbnail", "")
+
+            book_data = {"title": title, "authors": authors, "pub_date": pub_date, "thumbnail_url": thumbnail_url}
+
+            # Book Frame
+            book_frame = Frame(scrollable_frame, bg="gold", width=150, height=300, bd=2, relief=RIDGE)
+            book_frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+
+            # Display cover image
+            if thumbnail_url:
+                try:
+                    img_response = requests.get(thumbnail_url)
+                    img_data = img_response.content
+                    img = Image.open(BytesIO(img_data))
+                    img = img.resize((120, 160), Image.LANCZOS)
+                    img = ImageTk.PhotoImage(img)
+
+                    img_label = Label(book_frame, image=img, bg="gold")
+                    img_label.image = img
+                    img_label.pack(pady=10)
+                except Exception as e:
+                    print(f"Error loading image: {e}")
+
+            # Book title, authors, and publish date
+            title_label = Label(book_frame, text=title, font=("Arial", 12, "bold"), fg="black", bg="gold", wraplength=150)
+            title_label.pack(pady=5)
+
+            author_label = Label(book_frame, text=f"By: {authors}", font=("Arial", 10), fg="black", bg="gold", wraplength=150)
+            author_label.pack()
+
+            pub_date_label = Label(book_frame, text=f"Published: {pub_date}", font=("Arial", 10), fg="black", bg="gold")
+            pub_date_label.pack()
+
+            # Add to Favorites button
+            fav_button = Button(book_frame, text="Add to Favorites", command=lambda b=book_data: add_to_favorites(b), bg="black", fg="gold")
+            fav_button.pack(pady=5)
+
+            col += 1
+            if col >= columns:
+                col = 0
+                row += 1
+
+    except Exception as e:
+        print(f"Error fetching book details: {e}")
+
+# Function to display favorites
+def display_favorites():
+    for widget in scrollable_frame.winfo_children():
+        widget.destroy()
+
+    if not favorites:
+        messagebox.showinfo("Favorites", "You have no favorite books.")
+        return
+
+    row = 0
+    col = 0
+    columns = 8
+
+    for book in favorites:
+        book_frame = Frame(scrollable_frame, bg="gold", width=150, height=300, bd=2, relief=RIDGE)
+        book_frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+
+        # Display cover image
+        try:
+            img_response = requests.get(book["thumbnail_url"])
+            img_data = img_response.content
+            img = Image.open(BytesIO(img_data))
+            img = img.resize((120, 160), Image.LANCZOS)
+            img = ImageTk.PhotoImage(img)
+
+            img_label = Label(book_frame, image=img, bg="gold")
+            img_label.image = img
+            img_label.pack(pady=10)
+        except Exception as e:
+            print(f"Error loading image: {e}")
+
+        title_label = Label(book_frame, text=book["title"], font=("Arial", 12, "bold"), fg="black", bg="gold", wraplength=150)
+        title_label.pack(pady=5)
+
+        author_label = Label(book_frame, text=f"By: {book['authors']}", font=("Arial", 10), fg="black", bg="gold", wraplength=150)
+        author_label.pack()
+
+        pub_date_label = Label(book_frame, text=f"Published: {book['pub_date']}", font=("Arial", 10), fg="black", bg="gold")
+        pub_date_label.pack()
+
+        remove_button = Button(book_frame, text="Remove from Favorites", command=lambda b=book: remove_from_favorites(b), bg="black", fg="gold")
+        remove_button.pack(pady=5)
+
+        col += 1
+        if col >= columns:
+            col = 0
+            row += 1
+
+# Search and Favorites UI
+# Configure search frame to span across the center of the screen
+search_frame = Frame(root, bg="black")
+search_frame.grid(row=1, column=0, columnspan=4, pady=10, sticky="ew")
+
+# Adjust grid layout to center the contents
+search_frame.grid_columnconfigure(0, weight=1)
+search_frame.grid_columnconfigure(1, weight=0)
+search_frame.grid_columnconfigure(2, weight=0)
+search_frame.grid_columnconfigure(3, weight=0)
+search_frame.grid_columnconfigure(4, weight=1)
+
+# Centered label, entry, and buttons
+search_label = Label(search_frame, text="Search Books:", font=("Arial", 14), fg="gold", bg="black")
+search_label.grid(row=0, column=1, padx=5, pady=5)
+
+search_entry = Entry(search_frame, font=("Arial", 14), bg="black", fg="gold", width=30)
+search_entry.grid(row=0, column=2, padx=5, pady=5)
+
+search_button = Button(search_frame, text="Search", command=fetch_book_details, bg="gold", fg="black")
+search_button.grid(row=0, column=3, padx=5, pady=5)
+
+favorites_button = Button(search_frame, text="Show Favorites", command=display_favorites, bg="gold", fg="black")
+favorites_button.grid(row=0, column=4, padx=5, pady=5)
+
+# Scrollable frame for displaying book results
+canvas = Canvas(root, bg="black")
+canvas.grid(row=2, column=0, columnspan=4, sticky="nsew")
+
+scrollbar = Scrollbar(root, orient=VERTICAL, command=canvas.yview)
+scrollbar.grid(row=2, column=4, sticky="ns")
+
+scrollable_frame = Frame(canvas, bg="black")
+scrollable_frame.bind(
+    "<Configure>",
+    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+)
+
+canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
+
+# Grid weights for resizing behavior
+root.grid_rowconfigure(2, weight=1, minsize=700)
+root.grid_columnconfigure(0, weight=1)
+
+root.mainloop()
